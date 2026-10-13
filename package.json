@@ -1,0 +1,157 @@
+{
+  "publisher": "jeeva",
+  "author": "Jeeva <jeevavarshan1@gmail.com>",
+  "name": "codetime",
+  "displayName": "CodeTime Overview",
+  "version": "0.14.0",
+  "description": "%extension.description%",
+  "homepage": "https://github.com/Data-Trekkers/codetime-vscode#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Data-Trekkers/codetime-vscode"
+  },
+  "l10n": "./l10n",
+  "keywords": [
+    "code time",
+    "code",
+    "time",
+    "data",
+    "wakatime",
+    "codetime",
+    "worktime"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "images/logo.png",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codetime.getToken",
+        "title": "%command.getToken%"
+      },
+      {
+        "command": "codetime.toDashboard",
+        "title": "%command.toDashboard%"
+      },
+      {
+        "command": "codetime.codeTimeInStatusBar",
+        "title": "%command.codeTimeInStatusBar%"
+      }
+    ],
+    "configuration": {
+      "title": "%config.title%",
+      "properties": {
+        "codetime.statusBarInfo": {
+          "type": "string",
+          "default": "Total",
+          "enum": [
+            "Total",
+            "Today",
+            "24h"
+          ],
+          "enumDescriptions": [
+            "%config.statusBarInfo.enum.total%",
+            "%config.statusBarInfo.enum.today%",
+            "%config.statusBarInfo.enum.24h%"
+          ],
+          "description": "%config.statusBarInfo.description%"
+        },
+        "codetime.serverEntrypoint": {
+          "type": "string",
+          "default": "https://api.codetime.dev",
+          "description": "%config.serverEntrypoint.description%"
+        },
+        "codetime.proxy": {
+          "type": "string",
+          "default": "",
+          "description": "%config.proxy.description%"
+        },
+        "codetime.displayLanguage.title": {
+          "type": "string",
+          "default": "Auto",
+          "enum": [
+            "Auto",
+            "zh-CN",
+            "en",
+            "ja",
+            "de",
+            "fr",
+            "es",
+            "it",
+            "pt-BR",
+            "ru",
+            "ko",
+            "hi",
+            "zh-TW",
+            "ur"
+          ],
+          "enumDescriptions": [
+            "%codetime.displayLanguage.enum.auto%",
+            "%codetime.displayLanguage.enum.zh-cn%",
+            "%codetime.displayLanguage.enum.en%",
+            "%codetime.displayLanguage.enum.ja%",
+            "%codetime.displayLanguage.enum.de%",
+            "%codetime.displayLanguage.enum.fr%",
+            "%codetime.displayLanguage.enum.es%",
+            "%codetime.displayLanguage.enum.it%",
+            "%codetime.displayLanguage.enum.pt-br%",
+            "%codetime.displayLanguage.enum.ru%",
+            "%codetime.displayLanguage.enum.ko%",
+            "%codetime.displayLanguage.enum.hi%",
+            "%codetime.displayLanguage.enum.zh-tw%",
+            "%codetime.displayLanguage.enum.ur%"
+          ],
+          "title": "%codetime.displayLanguage.title%",
+          "description": "%codetime.displayLanguage.description%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "vscode:package": "vsce package",
+    "vscode:publish": "vsce package && vsce publish",
+    "compile": "webpack --devtool nosources-source-map --config ./build/node-extension.webpack.config.js",
+    "watch": "webpack --watch --devtool nosources-source-map --config ./build/node-extension.webpack.config.js --stats-error-details",
+    "package": "webpack --mode production --config ./build/node-extension.webpack.config.js ",
+    "test-compile": "tsc -p ./",
+    "test-watch": "tsc -watch -p ./",
+    "pretest": "pnpm run test-compile && yarn run lint",
+    "lint": "eslint . --fix",
+    "test": "node ./out/test/runTest.js"
+  },
+  "dependencies": {
+    "@npmcli/fs": "^4.0.0",
+    "@types/uuid": "^10.0.0",
+    "@vscode/l10n": "^0.0.18",
+    "@vscode/test-electron": "^2.5.2",
+    "date-fns": "^4.1.0",
+    "os-name": "^6.1.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@jannchie/eslint-config": "^3.6.1",
+    "@types/date-fns": "^2.6.3",
+    "@types/glob": "^9.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.19.1",
+    "@types/vscode": "^1.99.0",
+    "@vscode/l10n-dev": "^0.0.35",
+    "@vscode/vsce": "^3.6.0",
+    "eslint": "^9.31.0",
+    "glob": "^11.0.3",
+    "mocha": "^11.7.1",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.100.2",
+    "webpack-cli": "^6.0.1"
+  }
+}
