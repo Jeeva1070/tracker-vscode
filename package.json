@@ -1,8 +1,8 @@
 {
   "publisher": "Jeeva1070",
   "author": "Jeeva <jeevavarshan1@gmail.com>",
-  "name": "tracker-vscode",
-  "displayName": "CodeTime Overview",
+  "name": "habitify",
+  "displayName": "Habitify",
   "version": "0.14.0",
   "description": "%extension.description%",
   "homepage": "https://github.com/Jeeva1070/tracker-vscode#readme",
