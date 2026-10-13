@@ -1,14 +1,14 @@
 {
-  "publisher": "jeeva",
+  "publisher": "Jeeva1070",
   "author": "Jeeva <jeevavarshan1@gmail.com>",
-  "name": "codetime",
+  "name": "tracker-vscode2",
   "displayName": "CodeTime Overview",
   "version": "0.14.0",
   "description": "%extension.description%",
-  "homepage": "https://github.com/Data-Trekkers/codetime-vscode#readme",
+  "homepage": "https://github.com/Jeeva1070/tracker-vscode2#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Data-Trekkers/codetime-vscode"
+    "url": "https://github.com/Jeeva1070/tracker-vscode2"
   },
   "l10n": "./l10n",
   "keywords": [
