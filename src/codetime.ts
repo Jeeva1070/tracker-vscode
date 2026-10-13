@@ -1,8 +1,10 @@
 import { Buffer } from 'node:buffer'
+import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
 import * as os from 'node:os'
+import path from 'node:path'
 import process from 'node:process'
 import tls from 'node:tls'
 
@@ -14,7 +16,7 @@ import { getGitCurrentBranch, getGitOriginUrl } from './utils'
 
 export class CodeTime {
   osName = osName()
-  out: vscode.OutputChannel = vscode.window.createOutputChannel('Codetime')
+  out: vscode.OutputChannel = vscode.window.createOutputChannel('Habitify')
   private debounceTimer?: NodeJS.Timeout
   private secrets: vscode.SecretStorage
   private readonly platformArch = os.arch()
@@ -31,13 +33,16 @@ export class CodeTime {
   async setToken() {
     const token = await vscode.window.showInputBox({
       password: true,
-      placeHolder: vscode.l10n.t('CodeTime: Input Your Token (from: codetime.dev)'),
+      prompt: 'Habitify: Enter your Supabase Anon Key (or JWT token)',
+      placeHolder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      ignoreFocusOut: true,
     })
 
     if (token) {
       await this.secrets.store('codetime.token', token)
       this.token = token
       this.getCurrentDuration(true)
+      vscode.window.showInformationMessage('Habitify: Supabase API Key saved!')
     }
   }
 
@@ -67,20 +72,39 @@ export class CodeTime {
   }
 
   private apiRequest(method: string, path: string, body?: any): Promise<{ body: string, statusCode: number }> {
-    const serverUrl = vscode.workspace.getConfiguration('codetime').serverEntrypoint as string
-    const url = new URL(path, serverUrl)
+    const config = vscode.workspace.getConfiguration('codetime')
+    let serverUrl = config.get<string>('serverEntrypoint', 'https://api.codetime.dev')
+    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
+      serverUrl = `https://${serverUrl}`
+    }
+    serverUrl = serverUrl.replace(/\/+$/, '')
+
+    let resolvedPath = path
+    if (serverUrl.includes('supabase.co') && !serverUrl.endsWith('/rest/v1') && !path.startsWith('/rest/v1')) {
+      resolvedPath = `/rest/v1${path.startsWith('/') ? path : `/${path}`}`
+    }
+
+    const url = new URL(resolvedPath, serverUrl)
     const payload = body ? JSON.stringify(body) : undefined
     const proxy = this.getProxyUrl()
     const isHttpsTarget = url.protocol === 'https:'
     const targetPort = Number(url.port) || (isHttpsTarget ? 443 : 80)
 
+    const apiKey = config.get<string>('apiKey', '') || this.token
     const baseHeaders: Record<string, string> = {
-      'User-Agent': 'CodeTime Client',
-      'Authorization': `Bearer ${this.token}`,
+      'User-Agent': 'Habitify Client',
+    }
+    if (apiKey) {
+      baseHeaders['apikey'] = apiKey
+      baseHeaders['Authorization'] = `Bearer ${this.token || apiKey}`
+    }
+    else if (this.token) {
+      baseHeaders['Authorization'] = `Bearer ${this.token}`
     }
     if (payload) {
       baseHeaders['Content-Type'] = 'application/json'
       baseHeaders['Content-Length'] = Buffer.byteLength(payload).toString()
+      baseHeaders['Prefer'] = 'return=minimal'
     }
 
     return new Promise((resolve, reject) => {
@@ -410,53 +434,56 @@ export class CodeTime {
 
   private onChange(eventName = 'unknown') {
     const editor = vscode.window.activeTextEditor
-    const workspaceName = vscode.workspace.name
+    const workspaceName = vscode.workspace.name || 'default-workspace'
     const workspaceRoot = vscode.workspace.workspaceFolders
     if (workspaceRoot && editor) {
       const doc = editor.document
-      if (doc) {
+      if (doc && doc.uri.scheme !== 'output') {
         const lang = doc.languageId
         const absoluteFilePath = doc.fileName
         let relativeFilePath = vscode.workspace.asRelativePath(
           absoluteFilePath,
         )
         if (relativeFilePath === absoluteFilePath) {
-          relativeFilePath = '[other workspace]'
+          relativeFilePath = path.basename(absoluteFilePath)
         }
 
         if (relativeFilePath) {
-          const time = Date.now()
-          const origin = getGitOriginUrl()
           const branch = getGitCurrentBranch()
-          const data = {
-            project: workspaceName,
+          const config = vscode.workspace.getConfiguration('codetime')
+          const userId = config.get<string>('userId', 'user_alex')
+          const apiKey = config.get<string>('apiKey', '') || this.token
+
+          // Matches schema.sql `heartbeats` table:
+          // id, user_id, timestamp, duration_seconds, language, workspace_name, platform, file_path, branch
+          const heartbeat = {
+            id: randomUUID(),
+            user_id: userId,
+            timestamp: new Date().toISOString(),
+            duration_seconds: 120,
             language: lang,
-            relativeFile: relativeFilePath,
-            absoluteFile: absoluteFilePath,
-            editor: vscode.env.appName,
-            platform: this.osName,
-            eventTime: time,
-            eventType: eventName,
-            platformArch: this.platformArch,
-            gitOrigin: origin,
-            gitBranch: branch,
-            operationType: this.getOperationType(eventName),
+            workspace_name: workspaceName,
+            platform: process.platform,
+            file_path: relativeFilePath,
+            branch: branch || null,
           }
-          this.out.appendLine(JSON.stringify({ ...data, token: undefined }))
-          // Post data
-          if (this.token === '') {
-            this.out.appendLine('Token is empty, cannot send event data')
-            this.statusBar.text = `$(clock) ${vscode.l10n.t('CodeTime: Without Token')}`
-            this.statusBar.tooltip = vscode.l10n.t('Enter Token')
+          this.out.appendLine(`[Heartbeat] ${JSON.stringify(heartbeat)}`)
+
+          // Post to Supabase /rest/v1/heartbeats
+          if (!apiKey) {
+            this.out.appendLine('Supabase API key is empty, cannot send heartbeat')
+            this.statusBar.text = '$(clock) Habitify: Set Key'
+            this.statusBar.tooltip = 'Click to enter your Supabase Anon API key'
             this.statusBar.command = 'codetime.getToken'
             return
           }
-          this.apiRequest('POST', '/v3/users/event-log', data).catch((error: any) => {
+
+          this.apiRequest('POST', '/heartbeats', heartbeat).catch((error: any) => {
             if (error.response?.statusCode === 401) {
               this.handleAuthError()
             }
             else {
-              this.out.appendLine(`Error: ${error}`)
+              this.out.appendLine(`[Heartbeat Error]: ${error.message || error}`)
             }
           })
         }
@@ -469,8 +496,8 @@ export class CodeTime {
 
     if (this.authRetryCount <= this.maxAuthRetries) {
       this.out.appendLine(`Authentication failed, retrying (${this.authRetryCount}/${this.maxAuthRetries})...`)
-      this.statusBar.text = `$(clock) ${vscode.l10n.t('CodeTime: Auth Failed')}`
-      this.statusBar.tooltip = vscode.l10n.t('CodeTime: Authentication retry, please wait...')
+      this.statusBar.text = `$(clock) Habitify: Auth Failed`
+      this.statusBar.tooltip = 'Habitify: Authentication retry, please wait...'
       this.statusBar.command = 'codetime.getToken'
     }
     else {
@@ -481,8 +508,8 @@ export class CodeTime {
 
   private handleTokenInvalid() {
     this.authRetryCount = 0
-    this.statusBar.text = `$(clock) ${vscode.l10n.t('CodeTime: Token Invalid')}`
-    this.statusBar.tooltip = vscode.l10n.t('Enter Token')
+    this.statusBar.text = `$(clock) Habitify: Key Invalid`
+    this.statusBar.tooltip = 'Enter Supabase API Key'
     this.statusBar.command = 'codetime.getToken'
   }
 
@@ -492,29 +519,57 @@ export class CodeTime {
 
   private getCurrentDuration(showSuccess = false) {
     const config = vscode.workspace.getConfiguration('codetime')
-    const key = config.statusBarInfo
-    if (this.token === '') {
-      this.statusBar.text = `$(clock) ${vscode.l10n.t('CodeTime: Without Token')}`
-      this.statusBar.tooltip = vscode.l10n.t('Enter Token')
+    const key = config.get<string>('statusBarInfo', 'Total')
+    const apiKey = config.get<string>('apiKey', '') || this.token
+
+    if (!apiKey) {
+      this.statusBar.text = `$(clock) Habitify: Set Key`
+      this.statusBar.tooltip = 'Click to enter your Supabase Anon Key'
       this.statusBar.command = 'codetime.getToken'
       return
     }
-    let currentLanguage = config.displayLanguage.title
-    if (currentLanguage === 'Auto') {
-      currentLanguage = vscode.env.language
+
+    let currentLanguage = 'en'
+    const displayLanguage = config.get<any>('displayLanguage', { title: 'Auto' })
+    if (typeof displayLanguage === 'string') {
+      currentLanguage = displayLanguage === 'Auto' ? (vscode.env.language || 'en') : displayLanguage
     }
+    else if (displayLanguage && displayLanguage.title) {
+      currentLanguage = displayLanguage.title === 'Auto' ? (vscode.env.language || 'en') : displayLanguage.title
+    }
+
     this.statusBar.command = 'codetime.toDashboard'
-    this.statusBar.tooltip = vscode.l10n.t('CodeTime: Head to the dashboard for statistics')
-    const minutes = getMinutes(key)
-    this.apiRequest('GET', `/v3/users/self/minutes?minutes=${minutes}`).then(async (res: any) => {
-      const data = JSON.parse(res.body)
-      const { minutes } = data
-      this.out.appendLine(`Current duration: ${minutes} minutes`)
-      this.statusBar.text = `$(watch) ${await getDurationText(minutes, currentLanguage)}`
-      this.out.appendLine(await getDurationText(minutes, currentLanguage))
-      this.resetAuthRetryCount()
-      if (showSuccess) {
-        vscode.window.showInformationMessage(vscode.l10n.t('CodeTime: Token validation succeeded'))
+    this.statusBar.tooltip = 'Habitify: View your analytics dashboard'
+
+    const userId = config.get<string>('userId', 'user_alex')
+    let queryPath = `/heartbeats?user_id=eq.${encodeURIComponent(userId)}&select=duration_seconds`
+
+    if (key === 'Today') {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      queryPath += `&timestamp=gte.${encodeURIComponent(today.toISOString())}`
+    }
+    else if (key === '24h') {
+      const past24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      queryPath += `&timestamp=gte.${encodeURIComponent(past24h.toISOString())}`
+    }
+
+    this.apiRequest('GET', queryPath).then(async (res: any) => {
+      try {
+        const rows = JSON.parse(res.body) as Array<{ duration_seconds: number }>
+        const totalSeconds = rows.reduce((sum, r) => sum + (r.duration_seconds || 0), 0)
+        const minutes = Math.floor(totalSeconds / 60)
+
+        this.out.appendLine(`[Stats] Current duration (${key}): ${minutes} minutes (${rows.length} heartbeats)`)
+        this.statusBar.text = `$(watch) ${await getDurationText(minutes, currentLanguage)}`
+        this.statusBar.tooltip = `Habitify: ${minutes}m coded (${key})`
+        this.resetAuthRetryCount()
+        if (showSuccess) {
+          vscode.window.showInformationMessage('Habitify: Connected to Supabase successfully!')
+        }
+      }
+      catch (e) {
+        this.out.appendLine(`[Stats] Parse error: ${e}`)
       }
     }).catch((error: any) => {
       if (error.response?.statusCode === 401) {
@@ -525,8 +580,8 @@ export class CodeTime {
         if (error.code) {
           this.out.appendLine(`[Duration] Error code: ${error.code}`)
         }
-        this.statusBar.text = `$(clock) ${vscode.l10n.t('CodeTime: Network Error')}`
-        this.statusBar.tooltip = vscode.l10n.t('CodeTime: Network connection failed')
+        this.statusBar.text = `$(clock) Habitify: Network Error`
+        this.statusBar.tooltip = 'Habitify: Connection failed'
         this.statusBar.command = 'codetime.toDashboard'
       }
     })

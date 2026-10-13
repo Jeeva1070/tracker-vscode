@@ -69,6 +69,16 @@
           "default": "https://api.codetime.dev",
           "description": "%config.serverEntrypoint.description%"
         },
+        "codetime.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Supabase Anon Public API Key"
+        },
+        "codetime.userId": {
+          "type": "string",
+          "default": "user_alex",
+          "description": "User ID matching the users table in schema.sql"
+        },
         "codetime.proxy": {
           "type": "string",
           "default": "",
