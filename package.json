@@ -126,7 +126,7 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run package",
+    "vscode:prepublish": "npm run package",
     "vscode:package": "vsce package",
     "vscode:publish": "vsce package && vsce publish",
     "compile": "webpack --devtool nosources-source-map --config ./build/node-extension.webpack.config.js",

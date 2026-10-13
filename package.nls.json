@@ -26,5 +26,21 @@
   "habitify.displayLanguage.enum.hi": "Hindi",
   "habitify.displayLanguage.enum.zh-tw": "Chinese (Traditional)",
   "habitify.displayLanguage.enum.ur": "Urdu",
-  "habitify.displayLanguage.enum.auto": "Auto (follow VSCode language)"
+  "habitify.displayLanguage.enum.auto": "Auto (follow VSCode language)",
+  "codetime.displayLanguage.title": "Display Language",
+  "codetime.displayLanguage.description": "Select the display language for the Habitify extension.",
+  "codetime.displayLanguage.enum.zh-cn": "Chinese (Simplified)",
+  "codetime.displayLanguage.enum.en": "English",
+  "codetime.displayLanguage.enum.ja": "Japanese",
+  "codetime.displayLanguage.enum.de": "German",
+  "codetime.displayLanguage.enum.fr": "French",
+  "codetime.displayLanguage.enum.es": "Spanish",
+  "codetime.displayLanguage.enum.it": "Italian",
+  "codetime.displayLanguage.enum.pt-br": "Portuguese (Brazil)",
+  "codetime.displayLanguage.enum.ru": "Russian",
+  "codetime.displayLanguage.enum.ko": "Korean",
+  "codetime.displayLanguage.enum.hi": "Hindi",
+  "codetime.displayLanguage.enum.zh-tw": "Chinese (Traditional)",
+  "codetime.displayLanguage.enum.ur": "Urdu",
+  "codetime.displayLanguage.enum.auto": "Auto (follow VSCode language)"
 }
