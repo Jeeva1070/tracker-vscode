@@ -14,7 +14,7 @@ import * as events from './events'
 import { getDurationText } from './getDurationText'
 import { getGitCurrentBranch, getGitOriginUrl } from './utils'
 
-export class CodeTime {
+export class Habitify {
   osName = osName()
   out: vscode.OutputChannel = vscode.window.createOutputChannel('Habitify')
   private debounceTimer?: NodeJS.Timeout
@@ -39,7 +39,7 @@ export class CodeTime {
     })
 
     if (token) {
-      await this.secrets.store('codetime.token', token)
+      await this.secrets.store('habitify.token', token)
       this.token = token
       this.getCurrentDuration(true)
       vscode.window.showInformationMessage('Habitify: Supabase API Key saved!')
@@ -64,7 +64,8 @@ export class CodeTime {
 
   private getProxyUrl(): string {
     return (
-      vscode.workspace.getConfiguration('codetime').get<string>('proxy')
+      vscode.workspace.getConfiguration('habitify').get<string>('proxy')
+      || vscode.workspace.getConfiguration('codetime').get<string>('proxy')
       || process.env.HTTPS_PROXY || process.env.HTTP_PROXY
       || process.env.https_proxy || process.env.http_proxy
       || ''
@@ -72,7 +73,7 @@ export class CodeTime {
   }
 
   private apiRequest(method: string, path: string, body?: any): Promise<{ body: string, statusCode: number }> {
-    const config = vscode.workspace.getConfiguration('codetime')
+    const config = vscode.workspace.getConfiguration('habitify')
     let serverUrl = config.get<string>('serverEntrypoint', 'https://api.codetime.dev')
     if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
       serverUrl = `https://${serverUrl}`
@@ -291,21 +292,21 @@ export class CodeTime {
   }
 
   async initSetToken() {
-    const secretToken = await this.secrets.get('codetime.token')
-    const envToken = process.env.CODETIME_TOKEN
+    const secretToken = (await this.secrets.get('habitify.token')) || (await this.secrets.get('codetime.token'))
+    const envToken = process.env.HABITIFY_TOKEN || process.env.CODETIME_TOKEN
 
     if (secretToken) {
       this.token = secretToken
     }
     else if (envToken) {
       this.token = envToken
-      await this.secrets.store('codetime.token', envToken)
+      await this.secrets.store('habitify.token', envToken)
     }
     else {
       const stateToken = this.state.get<string>('token')
       if (stateToken) {
         this.token = stateToken
-        await this.secrets.store('codetime.token', stateToken)
+        await this.secrets.store('habitify.token', stateToken)
         this.state.update('token', undefined)
       }
     }
@@ -335,11 +336,13 @@ export class CodeTime {
   }
 
   private init(): void {
+    const serverUrl = vscode.workspace.getConfiguration('habitify').get<string>('serverEntrypoint')
+      || vscode.workspace.getConfiguration('codetime').get<string>('serverEntrypoint')
     this.out.appendLine(`[Init] proxy=${this.redactUrlForLogging(this.getProxyUrl())}`)
-    this.out.appendLine(`[Init] serverEntrypoint=${vscode.workspace.getConfiguration('codetime').serverEntrypoint}`)
+    this.out.appendLine(`[Init] serverEntrypoint=${serverUrl}`)
     this.out.appendLine(`[Init] token=${this.token ? `***${this.token.slice(-4)}` : '(empty)'}`)
 
-    this.statusBar.text = `$(clock) ${vscode.l10n.t('CodeTime: Initializing...')}`
+    this.statusBar.text = `$(clock) Habitify: Initializing...`
     this.statusBar.show()
     this.setupEventListeners()
     this.getCurrentDuration()
@@ -359,7 +362,7 @@ export class CodeTime {
     vscode.workspace.onDidSaveTextDocument(this.onSave, this, events)
     vscode.workspace.onDidCreateFiles(this.onCreate, this, events)
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('codetime')) {
+      if (e.affectsConfiguration('habitify') || e.affectsConfiguration('codetime')) {
         this.getCurrentDuration()
       }
     })
@@ -450,9 +453,9 @@ export class CodeTime {
 
         if (relativeFilePath) {
           const branch = getGitCurrentBranch()
-          const config = vscode.workspace.getConfiguration('codetime')
-          const userId = config.get<string>('userId', 'user_alex')
-          const apiKey = config.get<string>('apiKey', '') || this.token
+          const config = vscode.workspace.getConfiguration('habitify')
+          const userId = config.get<string>('userId') || vscode.workspace.getConfiguration('codetime').get<string>('userId', 'user_alex')
+          const apiKey = config.get<string>('apiKey') || vscode.workspace.getConfiguration('codetime').get<string>('apiKey', '') || this.token
 
           // Matches schema.sql `heartbeats` table:
           // id, user_id, timestamp, duration_seconds, language, workspace_name, platform, file_path, branch
@@ -474,7 +477,7 @@ export class CodeTime {
             this.out.appendLine('Supabase API key is empty, cannot send heartbeat')
             this.statusBar.text = '$(clock) Habitify: Set Key'
             this.statusBar.tooltip = 'Click to enter your Supabase Anon API key'
-            this.statusBar.command = 'codetime.getToken'
+            this.statusBar.command = 'habitify.getToken'
             return
           }
 
@@ -498,7 +501,7 @@ export class CodeTime {
       this.out.appendLine(`Authentication failed, retrying (${this.authRetryCount}/${this.maxAuthRetries})...`)
       this.statusBar.text = `$(clock) Habitify: Auth Failed`
       this.statusBar.tooltip = 'Habitify: Authentication retry, please wait...'
-      this.statusBar.command = 'codetime.getToken'
+      this.statusBar.command = 'habitify.getToken'
     }
     else {
       this.out.appendLine('Max authentication retries exceeded, token invalid')
@@ -510,7 +513,7 @@ export class CodeTime {
     this.authRetryCount = 0
     this.statusBar.text = `$(clock) Habitify: Key Invalid`
     this.statusBar.tooltip = 'Enter Supabase API Key'
-    this.statusBar.command = 'codetime.getToken'
+    this.statusBar.command = 'habitify.getToken'
   }
 
   private resetAuthRetryCount() {
@@ -518,19 +521,19 @@ export class CodeTime {
   }
 
   private getCurrentDuration(showSuccess = false) {
-    const config = vscode.workspace.getConfiguration('codetime')
-    const key = config.get<string>('statusBarInfo', 'Total')
-    const apiKey = config.get<string>('apiKey', '') || this.token
+    const config = vscode.workspace.getConfiguration('habitify')
+    const key = config.get<string>('statusBarInfo') || vscode.workspace.getConfiguration('codetime').get<string>('statusBarInfo', 'Total')
+    const apiKey = config.get<string>('apiKey') || vscode.workspace.getConfiguration('codetime').get<string>('apiKey', '') || this.token
 
     if (!apiKey) {
       this.statusBar.text = `$(clock) Habitify: Set Key`
       this.statusBar.tooltip = 'Click to enter your Supabase Anon Key'
-      this.statusBar.command = 'codetime.getToken'
+      this.statusBar.command = 'habitify.getToken'
       return
     }
 
     let currentLanguage = 'en'
-    const displayLanguage = config.get<any>('displayLanguage', { title: 'Auto' })
+    const displayLanguage = config.get<any>('displayLanguage') || vscode.workspace.getConfiguration('codetime').get<any>('displayLanguage', { title: 'Auto' })
     if (typeof displayLanguage === 'string') {
       currentLanguage = displayLanguage === 'Auto' ? (vscode.env.language || 'en') : displayLanguage
     }
@@ -538,10 +541,10 @@ export class CodeTime {
       currentLanguage = displayLanguage.title === 'Auto' ? (vscode.env.language || 'en') : displayLanguage.title
     }
 
-    this.statusBar.command = 'codetime.toDashboard'
+    this.statusBar.command = 'habitify.toDashboard'
     this.statusBar.tooltip = 'Habitify: View your analytics dashboard'
 
-    const userId = config.get<string>('userId', 'user_alex')
+    const userId = config.get<string>('userId') || vscode.workspace.getConfiguration('codetime').get<string>('userId', 'user_alex')
     let queryPath = `/heartbeats?user_id=eq.${encodeURIComponent(userId)}&select=duration_seconds`
 
     if (key === 'Today') {
@@ -582,7 +585,7 @@ export class CodeTime {
         }
         this.statusBar.text = `$(clock) Habitify: Network Error`
         this.statusBar.tooltip = 'Habitify: Connection failed'
-        this.statusBar.command = 'codetime.toDashboard'
+        this.statusBar.command = 'habitify.toDashboard'
       }
     })
   }
@@ -613,7 +616,7 @@ export class CodeTime {
           }
         }
         vscode.workspace
-          .getConfiguration('codetime')
+          .getConfiguration('habitify')
           .update('statusBarInfo', key, true)
           .then(() => this.getCurrentDuration())
       })

@@ -1,10 +1,10 @@
 {
   "publisher": "Jeeva1070",
-  "author": "Jeeva <jeevavarshan1@gmail.com>",
   "name": "habitify",
   "displayName": "Habitify",
   "version": "0.14.0",
   "description": "%extension.description%",
+  "author": "Jeeva <jeevavarshan1@gmail.com>",
   "homepage": "https://github.com/Jeeva1070/tracker-vscode#readme",
   "repository": {
     "type": "git",

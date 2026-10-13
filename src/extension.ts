@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import * as vscode from 'vscode'
-import { CodeTime } from './codetime'
+import { Habitify } from './codetime'
 
 // 本地化资源缓存
 let localizationBundle: Record<string, string> = {}
@@ -46,13 +46,11 @@ export function getLocalizedString(key: string): string {
   return localizationBundle[key] || key
 }
 
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
-let codetime: CodeTime
+let habitify: Habitify
 
 export async function activate(context: vscode.ExtensionContext) {
   // 读取 displayLanguage 配置
-  const config = vscode.workspace.getConfiguration('codetime')
+  const config = vscode.workspace.getConfiguration('habitify')
   const displayLanguage = config.get('displayLanguage', { title: 'Auto' })
   let language = displayLanguage.title === 'Auto' ? (vscode.env.language ?? '') : displayLanguage.title
   // 统一小写
@@ -60,22 +58,22 @@ export async function activate(context: vscode.ExtensionContext) {
   // 动态加载本地化资源
   await loadLocalizationResources(context, language)
 
-  codetime = new CodeTime(context.globalState, context.secrets)
-  vscode.commands.registerCommand('codetime.getToken', () => {
-    codetime.setToken()
+  habitify = new Habitify(context.globalState, context.secrets)
+  vscode.commands.registerCommand('habitify.getToken', () => {
+    habitify.setToken()
   })
-  vscode.commands.registerCommand('codetime.codeTimeInStatusBar', () => {
-    codetime.codeTimeInStatBar()
+  vscode.commands.registerCommand('habitify.codeTimeInStatusBar', () => {
+    habitify.codeTimeInStatBar()
   })
-  vscode.commands.registerCommand('codetime.toDashboard', () => {
-    const url = `https://codetime.dev/dashboard`
+  vscode.commands.registerCommand('habitify.toDashboard', () => {
+    const url = `https://supabase.com/dashboard`
     vscode.env.openExternal(vscode.Uri.parse(url))
   })
 
   // 监听配置变更，动态切换语言
   vscode.workspace.onDidChangeConfiguration(async (e) => {
-    if (e.affectsConfiguration('codetime.displayLanguage')) {
-      const newConfig = vscode.workspace.getConfiguration('codetime')
+    if (e.affectsConfiguration('habitify.displayLanguage')) {
+      const newConfig = vscode.workspace.getConfiguration('habitify')
       const newDisplayLanguage = newConfig.get<string>('displayLanguage', 'Auto')
       const newLang = newDisplayLanguage === 'Auto' ? vscode.env.language : newDisplayLanguage
       if (newLang !== currentLanguage) {
@@ -86,7 +84,7 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-  if (codetime) {
-    codetime.dispose()
+  if (habitify) {
+    habitify.dispose()
   }
 }
