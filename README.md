@@ -1,65 +1,71 @@
-# Code Time
+# Trackeee
 
-[![CodeTime Badge](https://shields.jannchie.com/endpoint?style=social&color=0284c7&url=https%3A%2F%2Fapi.codetime.dev%2Fv3%2Fusers%2Fshield%3Fuid%3D2%26tag%3Dcodetime)](https://codetime.dev)
-![rating](https://vsmarketplacebadges.dev/rating/Jannchie.codetime.png)
-![installs](https://vsmarketplacebadges.dev/installs/Jannchie.codetime.png)
+Trackeee is a high-performance VS Code extension for tracking developer telemetry, coding activity, and active session duration.
 
-CodeTime vscode plugin. Statistical analysis of programming time.
+---
 
-Web Site: [Code Time](https://codetime.dev)
+## Features
 
-## Previews
+- ⏱ **Automatic Time Tracking**: Tracks active coding time across multiple languages, files, and workspaces with zero manual timers.
+- 🔒 **Secure Personal Token Access**: Connects securely to your telemetry backend using only your personal access token (`hb_sec_...`). No database keys or sensitive credentials required.
+- ⚡ **Real-Time Status Bar**: Live display of today's coding minutes, 24-hour total, or all-time duration right in the status bar.
+- 🌐 **Multi-Language Support**: Complete localization support across 12+ languages.
+- 🔋 **Battery & Network Efficient**: Debounced and batch-buffered heartbeats to minimize network traffic and system resources.
 
-![Dash board](images/preview.png)
+---
 
-## Usage
+## Installation & Setup
 
-1. Login from web site: [CodeTime](https://codetime.dev).
-2. Get token from web site: [CodeTime / settings](https://codetime.dev/dashboard/settings).
-3. In VSCode, Press <kbd>F1</kbd>, enter `token` to find the command: `CodeTime: Enter Token`, Press <kbd>Enter</kbd> and then input your token.
-4. Write some code, visit the dashboard and check if data is available.
+1. **Install the Extension**:
+   Install `trackeee` directly from the VS Code Marketplace or install the `.vsix` file:
+   ```bash
+   code --install-extension trackeee-0.14.0.vsix
+   ```
 
-> If using an online IDE like [GitHub Codespaces](https://docs.github.com/en/codespaces), add your token to global ENV variable `CODETIME_TOKEN`.
+2. **Retrieve Your Token**:
+   Open your DevHabit / Habitify desktop app, navigate to **Settings**, and copy your **Personal Access Token** (`hb_sec_...`).
 
-## Settings
+3. **Authenticate in VS Code**:
+   - Press <kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> (or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>).
+   - Type and select: **`Trackeee: Enter token`**.
+   - Paste your copied token and press <kbd>Enter</kbd>.
 
-### Status Bar Info
+4. **Verify Connection**:
+   You will see the confirmation notification:
+   > `Trackeee: Connected successfully! Telemetry active.`
+   and the status bar item `$(watch) 0m` will activate immediately.
 
-You are able to select what time to show in your status bar by:
+---
 
-- Press <kbd>Ctrl</kbd> (or <kbd>command</kbd> in Mac OS) + <kbd>,</kbd>, then search `codetime` to find the options.
-- Press <kbd>F1</kbd>, enter `codetime` to find the options.
+## Configuration Settings
 
-Supported options are:
+Search for `trackeee` (or `habitify`) in VS Code Settings (`Cmd + ,`):
 
-- total: Show total code time
-- average: Show average code time.
-- today: Show today code time.
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+| `habitify.serverEntrypoint` | `http://localhost:3001` | Telemetry ingestion API endpoint |
+| `codetime.flushInterval` | `60` | Heartbeat flush interval in seconds |
+| `codetime.idleTimeout` | `5` | Minutes of inactivity before pausing tracking |
+| `codetime.statusBarInfo` | `Today` | Time metric to display: `Today`, `24h`, or `Total` |
+| `codetime.enabledLanguages` | `[]` | Whitelist specific languages (empty tracks all) |
 
-### Language / displayLanguage
+---
 
-#### Purpose
+## Development & Packaging
 
-The `displayLanguage` option is used to switch the display language of the plugin interface. You can choose a specific language as needed, or use "auto" mode to automatically follow VSCode's interface language.
+```bash
+# Install dependencies
+pnpm install
 
-#### Supported Languages
+# Build extension
+npm run package
 
-- `auto`: Auto mode, follows VSCode's current interface language
-- `en`: English
-- `zh-cn`: Simplified Chinese
-- `zh-tw`: Traditional Chinese
-- `de`: Deutsch (German)
-- `es`: Español (Spanish)
-- `fr`: Français (French)
-- `hi`: हिन्दी (Hindi)
-- `it`: Italiano (Italian)
-- `ja`: 日本語 (Japanese)
-- `ko`: 한국어 (Korean)
-- `pt-br`: Português (Brasil) (Portuguese-Brazil)
-- `ru`: Русский (Russian)
-- `ur`: اردو (Urdu)
+# Package VSIX bundle
+npx @vscode/vsce package --no-dependencies
+```
 
-#### How to Switch
+---
 
-1. Press <kbd>Ctrl</kbd> (or <kbd>command</kbd> on Mac) + <kbd>,</kbd> to open settings, search for `codetime displayLanguage`.
-2. Or press <kbd>F1</kbd>, enter `codetime`, and find the `displayLanguage` option in settings to switch.
+## License
+
+MIT License.

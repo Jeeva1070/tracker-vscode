@@ -6,7 +6,7 @@
   "CodeTime: Without Token": "CodeTime: 토큰 없음",
   "Enter Token": "토큰 입력",
   "CodeTime: Head to the dashboard for statistics": "CodeTime: 통계 대시보드로 이동",
-  "CodeTime: Input Your Token (from: codetime.dev)": "CodeTime: 토큰을 입력하세요 (출처: codetime.dev)",
+  "CodeTime: Input Your Token (from: DevHabit)": "CodeTime: 토큰을 입력하세요 (출처: DevHabit)",
   "CodeTime: Token validation failed": "CodeTime: 토큰 검증 실패",
   "CodeTime: Cannot Get Token": "CodeTime: 토큰을 가져올 수 없음",
   "CodeTime: Token validation succeeded": "CodeTime: 토큰 검증 성공"

@@ -59,15 +59,21 @@ export async function activate(context: vscode.ExtensionContext) {
   await loadLocalizationResources(context, language)
 
   habitify = new Habitify(context.globalState, context.secrets)
-  vscode.commands.registerCommand('habitify.getToken', () => {
-    habitify.setToken()
+  
+  // Register command aliases for Trackeee / Habitify
+  const registerCmd = (name: string, fn: () => void) => {
+    vscode.commands.registerCommand(name, fn)
+  }
+
+  registerCmd('habitify.getToken', () => habitify.setToken())
+  registerCmd('codetime.getToken', () => habitify.setToken())
+  registerCmd('habitify.codeTimeInStatusBar', () => habitify.codeTimeInStatBar())
+  registerCmd('codetime.codeTimeInStatusBar', () => habitify.codeTimeInStatBar())
+  registerCmd('habitify.toDashboard', () => {
+    vscode.env.openExternal(vscode.Uri.parse('https://app.devhabit.com'))
   })
-  vscode.commands.registerCommand('habitify.codeTimeInStatusBar', () => {
-    habitify.codeTimeInStatBar()
-  })
-  vscode.commands.registerCommand('habitify.toDashboard', () => {
-    const url = `https://supabase.com/dashboard`
-    vscode.env.openExternal(vscode.Uri.parse(url))
+  registerCmd('codetime.toDashboard', () => {
+    vscode.env.openExternal(vscode.Uri.parse('https://app.devhabit.com'))
   })
 
   // 监听配置变更，动态切换语言

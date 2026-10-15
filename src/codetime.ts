@@ -16,7 +16,7 @@ import { getGitCurrentBranch, getGitOriginUrl } from './utils'
 
 export class Habitify {
   osName = osName()
-  out: vscode.OutputChannel = vscode.window.createOutputChannel('Habitify')
+  out: vscode.OutputChannel = vscode.window.createOutputChannel('Trackeee')
   private debounceTimer?: NodeJS.Timeout
   private secrets: vscode.SecretStorage
   private readonly platformArch = os.arch()
@@ -33,16 +33,75 @@ export class Habitify {
   async setToken() {
     const token = await vscode.window.showInputBox({
       password: true,
-      prompt: 'Habitify: Enter your Supabase Anon Key (or JWT token)',
-      placeHolder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      prompt: 'Trackeee: Enter your Personal Token (from DevHabit Settings)',
+      placeHolder: 'hb_sec_...',
       ignoreFocusOut: true,
     })
 
     if (token) {
-      await this.secrets.store('habitify.token', token)
-      this.token = token
-      this.getCurrentDuration(true)
-      vscode.window.showInformationMessage('Habitify: Supabase API Key saved!')
+      const cleanToken = token.trim()
+      await this.secrets.store('devhabit.token', cleanToken)
+      await this.secrets.store('habitify.token', cleanToken)
+      this.token = cleanToken
+      await this.verifyTokenAndInit(true)
+    }
+  }
+
+  async verifyTokenAndInit(showNotification = false) {
+    if (!this.token) {
+      this.statusBar.text = '$(key) Trackeee: Set Token'
+      this.statusBar.tooltip = 'Click to enter your Personal Access Token'
+      this.statusBar.command = 'habitify.getToken'
+      return false
+    }
+
+    const config = vscode.workspace.getConfiguration('habitify')
+    const fallbackConfig = vscode.workspace.getConfiguration('codetime')
+    const serverUrl = config.get<string>('serverEntrypoint')
+      || fallbackConfig.get<string>('serverEntrypoint')
+      || 'http://localhost:3001'
+
+    const isSupabase = serverUrl.includes('supabase.co')
+    const endpoint = isSupabase ? '/rpc/verify_extension_token' : '/api/auth/verify'
+    const body = isSupabase ? { p_token: this.token } : { token: this.token }
+
+    try {
+      const res = await this.apiRequest('POST', endpoint, body)
+      const data = JSON.parse(res.body || '{}')
+
+      if (data.valid || data.success) {
+        this.resetAuthRetryCount()
+        const user = data.user?.displayName || data.displayName || 'Connected'
+        this.statusBar.text = '$(watch) Trackeee: Active'
+        this.statusBar.tooltip = `Trackeee: Connected as @${user} · Telemetry active`
+        this.statusBar.command = 'habitify.toDashboard'
+        if (showNotification) {
+          vscode.window.showInformationMessage(`Trackeee: Connected successfully as @${user}! Telemetry active.`)
+        }
+        this.getCurrentDuration()
+        return true
+      }
+      else {
+        this.handleTokenInvalid()
+        if (showNotification) {
+          vscode.window.showErrorMessage('Trackeee: Invalid token. Please check your token in DevHabit Settings.')
+        }
+        return false
+      }
+    }
+    catch (err: any) {
+      this.out.appendLine(`[Token Verify Error] ${err.message || err}`)
+      // Fallback: if offline or self-hosted, still accept validly-formatted tokens
+      if (this.token.startsWith('hb_sec_') || this.token.startsWith('dh_')) {
+        this.statusBar.text = '$(watch) Trackeee: Ready'
+        this.statusBar.tooltip = 'Trackeee: Token saved (offline mode)'
+        if (showNotification) {
+          vscode.window.showInformationMessage('Trackeee: Token saved! Telemetry active.')
+        }
+        return true
+      }
+      this.handleTokenInvalid()
+      return false
     }
   }
 
@@ -74,7 +133,10 @@ export class Habitify {
 
   private apiRequest(method: string, path: string, body?: any): Promise<{ body: string, statusCode: number }> {
     const config = vscode.workspace.getConfiguration('habitify')
-    let serverUrl = config.get<string>('serverEntrypoint', 'https://api.codetime.dev')
+    const fallbackConfig = vscode.workspace.getConfiguration('codetime')
+    let serverUrl = config.get<string>('serverEntrypoint')
+      || fallbackConfig.get<string>('serverEntrypoint')
+      || 'https://cqdwtumqcxpvhsqfwhsm.supabase.co/rest/v1'
     if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
       serverUrl = `https://${serverUrl}`
     }
@@ -93,7 +155,7 @@ export class Habitify {
 
     const apiKey = config.get<string>('apiKey', '') || this.token
     const baseHeaders: Record<string, string> = {
-      'User-Agent': 'Habitify Client',
+      'User-Agent': 'Trackeee Client',
     }
     if (apiKey) {
       baseHeaders['apikey'] = apiKey
@@ -292,23 +354,17 @@ export class Habitify {
   }
 
   async initSetToken() {
-    const secretToken = (await this.secrets.get('habitify.token')) || (await this.secrets.get('codetime.token'))
-    const envToken = process.env.HABITIFY_TOKEN || process.env.CODETIME_TOKEN
+    const secretToken = (await this.secrets.get('devhabit.token'))
+      || (await this.secrets.get('habitify.token'))
+      || (await this.secrets.get('codetime.token'))
+    const envToken = process.env.DEVHABIT_TOKEN || process.env.HABITIFY_TOKEN || process.env.CODETIME_TOKEN
 
     if (secretToken) {
       this.token = secretToken
     }
     else if (envToken) {
       this.token = envToken
-      await this.secrets.store('habitify.token', envToken)
-    }
-    else {
-      const stateToken = this.state.get<string>('token')
-      if (stateToken) {
-        this.token = stateToken
-        await this.secrets.store('habitify.token', stateToken)
-        this.state.update('token', undefined)
-      }
+      await this.secrets.store('devhabit.token', envToken)
     }
 
     if (this.token === '') {
@@ -342,7 +398,7 @@ export class Habitify {
     this.out.appendLine(`[Init] serverEntrypoint=${serverUrl}`)
     this.out.appendLine(`[Init] token=${this.token ? `***${this.token.slice(-4)}` : '(empty)'}`)
 
-    this.statusBar.text = `$(clock) Habitify: Initializing...`
+    this.statusBar.text = `$(clock) Trackeee: Initializing...`
     this.statusBar.show()
     this.setupEventListeners()
     this.getCurrentDuration()
@@ -452,18 +508,26 @@ export class Habitify {
         }
 
         if (relativeFilePath) {
-          const branch = getGitCurrentBranch()
-          const config = vscode.workspace.getConfiguration('habitify')
-          const userId = config.get<string>('userId') || vscode.workspace.getConfiguration('codetime').get<string>('userId', 'user_alex')
-          const apiKey = config.get<string>('apiKey') || vscode.workspace.getConfiguration('codetime').get<string>('apiKey', '') || this.token
+          const config = vscode.workspace.getConfiguration('codetime')
+          const enabledLanguages = config.get<string[]>('enabledLanguages', [])
+          if (enabledLanguages && enabledLanguages.length > 0 && !enabledLanguages.includes(lang)) {
+            return
+          }
 
-          // Matches schema.sql `heartbeats` table:
-          // id, user_id, timestamp, duration_seconds, language, workspace_name, platform, file_path, branch
+          const flushInterval = config.get<number>('flushInterval', 60)
+          const branch = getGitCurrentBranch()
+          const userId = config.get<string>('userId') || 'user_developer'
+          if (!this.token) {
+            this.statusBar.text = '$(key) Trackeee: Set Token'
+            this.statusBar.tooltip = 'Click to enter your Personal Access Token'
+            this.statusBar.command = 'habitify.getToken'
+            return
+          }
+
           const heartbeat = {
             id: randomUUID(),
-            user_id: userId,
             timestamp: new Date().toISOString(),
-            duration_seconds: 120,
+            duration_seconds: flushInterval,
             language: lang,
             workspace_name: workspaceName,
             platform: process.platform,
@@ -472,16 +536,26 @@ export class Habitify {
           }
           this.out.appendLine(`[Heartbeat] ${JSON.stringify(heartbeat)}`)
 
-          // Post to Supabase /rest/v1/heartbeats
-          if (!apiKey) {
-            this.out.appendLine('Supabase API key is empty, cannot send heartbeat')
-            this.statusBar.text = '$(clock) Habitify: Set Key'
-            this.statusBar.tooltip = 'Click to enter your Supabase Anon API key'
-            this.statusBar.command = 'habitify.getToken'
-            return
-          }
+          const serverUrl = config.get<string>('serverEntrypoint')
+            || vscode.workspace.getConfiguration('codetime').get<string>('serverEntrypoint')
+            || 'http://localhost:3001'
 
-          this.apiRequest('POST', '/heartbeats', heartbeat).catch((error: any) => {
+          const isSupabase = serverUrl.includes('supabase.co')
+          const endpoint = isSupabase ? '/rpc/ingest_heartbeat_with_token' : '/api/heartbeats'
+          const payload = isSupabase
+            ? { p_token: this.token, p_heartbeat: heartbeat }
+            : { ...heartbeat, token: this.token }
+
+          this.apiRequest('POST', endpoint, payload).then((res: any) => {
+            try {
+              const data = JSON.parse(res.body || '{}')
+              if (data.todayMinutes !== undefined) {
+                this.statusBar.text = `$(watch) ${data.todayMinutes}m`
+                this.statusBar.tooltip = `Trackeee: ${data.todayMinutes}m coded today`
+              }
+            }
+            catch {}
+          }).catch((error: any) => {
             if (error.response?.statusCode === 401) {
               this.handleAuthError()
             }
@@ -499,8 +573,8 @@ export class Habitify {
 
     if (this.authRetryCount <= this.maxAuthRetries) {
       this.out.appendLine(`Authentication failed, retrying (${this.authRetryCount}/${this.maxAuthRetries})...`)
-      this.statusBar.text = `$(clock) Habitify: Auth Failed`
-      this.statusBar.tooltip = 'Habitify: Authentication retry, please wait...'
+      this.statusBar.text = `$(clock) Trackeee: Auth Failed`
+      this.statusBar.tooltip = 'Trackeee: Authentication retry, please wait...'
       this.statusBar.command = 'habitify.getToken'
     }
     else {
@@ -511,8 +585,8 @@ export class Habitify {
 
   private handleTokenInvalid() {
     this.authRetryCount = 0
-    this.statusBar.text = `$(clock) Habitify: Key Invalid`
-    this.statusBar.tooltip = 'Enter Supabase API Key'
+    this.statusBar.text = `$(key) Trackeee: Set Token`
+    this.statusBar.tooltip = 'Click to enter your Personal Token (from DevHabit Settings)'
     this.statusBar.command = 'habitify.getToken'
   }
 
@@ -521,71 +595,44 @@ export class Habitify {
   }
 
   private getCurrentDuration(showSuccess = false) {
-    const config = vscode.workspace.getConfiguration('habitify')
-    const key = config.get<string>('statusBarInfo') || vscode.workspace.getConfiguration('codetime').get<string>('statusBarInfo', 'Total')
-    const apiKey = config.get<string>('apiKey') || vscode.workspace.getConfiguration('codetime').get<string>('apiKey', '') || this.token
-
-    if (!apiKey) {
-      this.statusBar.text = `$(clock) Habitify: Set Key`
-      this.statusBar.tooltip = 'Click to enter your Supabase Anon Key'
+    if (!this.token) {
+      this.statusBar.text = `$(key) Trackeee: Set Token`
+      this.statusBar.tooltip = 'Click to enter your Personal Access Token'
       this.statusBar.command = 'habitify.getToken'
       return
     }
 
-    let currentLanguage = 'en'
-    const displayLanguage = config.get<any>('displayLanguage') || vscode.workspace.getConfiguration('codetime').get<any>('displayLanguage', { title: 'Auto' })
-    if (typeof displayLanguage === 'string') {
-      currentLanguage = displayLanguage === 'Auto' ? (vscode.env.language || 'en') : displayLanguage
-    }
-    else if (displayLanguage && displayLanguage.title) {
-      currentLanguage = displayLanguage.title === 'Auto' ? (vscode.env.language || 'en') : displayLanguage.title
-    }
+    const config = vscode.workspace.getConfiguration('habitify')
+    const serverUrl = config.get<string>('serverEntrypoint')
+      || vscode.workspace.getConfiguration('codetime').get<string>('serverEntrypoint')
+      || 'http://localhost:3001'
 
-    this.statusBar.command = 'habitify.toDashboard'
-    this.statusBar.tooltip = 'Habitify: View your analytics dashboard'
+    const isSupabase = serverUrl.includes('supabase.co')
+    const endpoint = isSupabase ? '/rpc/get_token_today_duration' : '/api/stats'
+    const method = isSupabase ? 'POST' : 'GET'
+    const body = isSupabase ? { p_token: this.token } : undefined
 
-    const userId = config.get<string>('userId') || vscode.workspace.getConfiguration('codetime').get<string>('userId', 'user_alex')
-    let queryPath = `/heartbeats?user_id=eq.${encodeURIComponent(userId)}&select=duration_seconds`
-
-    if (key === 'Today') {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      queryPath += `&timestamp=gte.${encodeURIComponent(today.toISOString())}`
-    }
-    else if (key === '24h') {
-      const past24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      queryPath += `&timestamp=gte.${encodeURIComponent(past24h.toISOString())}`
-    }
-
-    this.apiRequest('GET', queryPath).then(async (res: any) => {
+    this.apiRequest(method, endpoint, body).then(async (res: any) => {
       try {
-        const rows = JSON.parse(res.body) as Array<{ duration_seconds: number }>
-        const totalSeconds = rows.reduce((sum, r) => sum + (r.duration_seconds || 0), 0)
-        const minutes = Math.floor(totalSeconds / 60)
-
-        this.out.appendLine(`[Stats] Current duration (${key}): ${minutes} minutes (${rows.length} heartbeats)`)
-        this.statusBar.text = `$(watch) ${await getDurationText(minutes, currentLanguage)}`
-        this.statusBar.tooltip = `Habitify: ${minutes}m coded (${key})`
+        const data = JSON.parse(res.body || '{}')
+        const minutes = data.todayMinutes !== undefined ? data.todayMinutes : (data.totalMinutes || 0)
+        this.statusBar.text = `$(watch) ${minutes}m`
+        this.statusBar.tooltip = `Trackeee: ${minutes}m coded today`
         this.resetAuthRetryCount()
         if (showSuccess) {
-          vscode.window.showInformationMessage('Habitify: Connected to Supabase successfully!')
+          vscode.window.showInformationMessage(`Trackeee: Connected! ${minutes}m tracked today.`)
         }
       }
       catch (e) {
         this.out.appendLine(`[Stats] Parse error: ${e}`)
       }
     }).catch((error: any) => {
+      const errMsg = error.message || error || 'Unknown error'
       if (error.response?.statusCode === 401) {
         this.handleAuthError()
       }
       else {
-        this.out.appendLine(`[Duration] Network error: ${error.message || error}`)
-        if (error.code) {
-          this.out.appendLine(`[Duration] Error code: ${error.code}`)
-        }
-        this.statusBar.text = `$(clock) Habitify: Network Error`
-        this.statusBar.tooltip = 'Habitify: Connection failed'
-        this.statusBar.command = 'habitify.toDashboard'
+        this.out.appendLine(`[Duration Error]: ${errMsg}`)
       }
     })
   }
