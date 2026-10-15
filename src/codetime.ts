@@ -401,8 +401,10 @@ export class Habitify {
     this.statusBar.text = `$(clock) Trackeee: Initializing...`
     this.statusBar.show()
     this.setupEventListeners()
+    this.drainOfflineQueue()
     this.getCurrentDuration()
     this.inter = setInterval(() => {
+      this.drainOfflineQueue()
       this.getCurrentDuration()
     }, 60 * 1000)
   }
@@ -555,16 +557,91 @@ export class Habitify {
               }
             }
             catch {}
+            // When an upload succeeds, drain any pending offline items
+            this.drainOfflineQueue()
           }).catch((error: any) => {
             if (error.response?.statusCode === 401) {
               this.handleAuthError()
             }
             else {
-              this.out.appendLine(`[Heartbeat Error]: ${error.message || error}`)
+              this.out.appendLine(`[Heartbeat Offline]: ${error.message || error}`)
+              // Persist heartbeat to on-disk SQLite queue so work is never lost
+              this.enqueueOfflineHeartbeat(heartbeat)
             }
           })
         }
       }
+    }
+  }
+
+  // MARK: - On-Disk Persistent Offline Queue (Backed by VS Code SQLite state.vscdb)
+  private readonly QUEUE_STORAGE_KEY = 'trackeee.offline_heartbeats'
+  private isDrainingQueue = false
+
+  private async enqueueOfflineHeartbeat(heartbeat: any) {
+    try {
+      const queue: any[] = this.state.get<any[]>(this.QUEUE_STORAGE_KEY, [])
+      // Cap at 10,000 heartbeats (up to ~160 hours of continuous offline typing)
+      if (queue.length < 10000) {
+        queue.push(heartbeat)
+        await this.state.update(this.QUEUE_STORAGE_KEY, queue)
+        this.out.appendLine(`[Offline Queue] Persisted heartbeat ${heartbeat.id} to disk. Total queued: ${queue.length}`)
+        this.statusBar.text = `$(cloud-offline) ${queue.length} queued`
+        this.statusBar.tooltip = `Trackeee: Offline · ${queue.length} heartbeats saved to disk`
+      }
+    }
+    catch (e) {
+      this.out.appendLine(`[Offline Queue Error] Failed to persist: ${e}`)
+    }
+  }
+
+  private async drainOfflineQueue() {
+    if (this.isDrainingQueue || !this.token) {
+      return
+    }
+
+    const queue: any[] = this.state.get<any[]>(this.QUEUE_STORAGE_KEY, [])
+    if (!queue || queue.length === 0) {
+      return
+    }
+
+    this.isDrainingQueue = true
+    this.out.appendLine(`[Offline Queue] Replaying ${queue.length} offline heartbeats from disk...`)
+
+    const config = vscode.workspace.getConfiguration('habitify')
+    const serverUrl = config.get<string>('serverEntrypoint')
+      || vscode.workspace.getConfiguration('codetime').get<string>('serverEntrypoint')
+      || 'http://localhost:3001'
+    const isSupabase = serverUrl.includes('supabase.co')
+    const endpoint = isSupabase ? '/rpc/ingest_heartbeat_with_token' : '/api/heartbeats'
+
+    let successCount = 0
+    let failedIndex = -1
+
+    for (let i = 0; i < queue.length; i++) {
+      const hb = queue[i]
+      const payload = isSupabase ? { p_token: this.token, p_heartbeat: hb } : { ...hb, token: this.token }
+      try {
+        await this.apiRequest('POST', endpoint, payload)
+        successCount++
+      }
+      catch (err: any) {
+        // If still offline, stop and keep remaining items on disk
+        failedIndex = i
+        break
+      }
+    }
+
+    const remaining = failedIndex >= 0 ? queue.slice(failedIndex) : []
+    await this.state.update(this.QUEUE_STORAGE_KEY, remaining)
+    this.out.appendLine(`[Offline Queue] Replayed ${successCount} heartbeats. ${remaining.length} remaining on disk.`)
+    this.isDrainingQueue = false
+
+    if (remaining.length === 0) {
+      this.getCurrentDuration()
+    }
+    else {
+      this.statusBar.text = `$(cloud-offline) ${remaining.length} queued`
     }
   }
 
