@@ -406,7 +406,7 @@ export class Habitify {
     this.inter = setInterval(() => {
       this.drainOfflineQueue()
       this.getCurrentDuration()
-    }, 60 * 1000)
+    }, 10 * 1000)
   }
 
   private setupEventListeners(): void {
@@ -516,7 +516,7 @@ export class Habitify {
             return
           }
 
-          const flushInterval = config.get<number>('flushInterval', 60)
+          const flushInterval = config.get<number>('flushInterval', 10)
           const branch = getGitCurrentBranch()
           const userId = config.get<string>('userId') || 'user_developer'
           if (!this.token) {
